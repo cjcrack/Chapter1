@@ -1,2 +1,195 @@
-Hello World!
-Goodbe, world!
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Account Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        label { display: block; margin-top: 0.5em; }
+        input { padding: 0.3em; width: 300px; }
+        #message { margin-top: 1em; color: red; }
+    </style>
+</head>
+<body>
+    <div id="language-switcher">
+        <button id="lang-en">English</button>
+        <button id="lang-es">Español</button>
+    </div>
+    <h1 id="title">Account Registration</h1>
+    <form id="registration-form">
+        <label id="lbl-username">Username (unique):</label>
+        <input type="text" id="username" required />
+        <label id="lbl-contact">Email or Mobile:</label>
+        <input type="text" id="contact" required />
+        <label id="lbl-name">Full Name:</label>
+        <input type="text" id="fullname" required />
+        <label id="lbl-id">Identity Document:</label>
+        <input type="text" id="identity" required />
+        <label id="lbl-age">Age:</label>
+        <input type="number" id="age" required min="0" />
+        <label id="lbl-captcha"></label>
+        <input type="text" id="captcha-answer" required />
+        <div style="margin-top:1em;">
+            <button type="button" id="save-btn">Save Progress</button>
+            <button type="submit" id="submit-btn">Submit</button>
+        </div>
+    </form>
+    <div id="message"></div>
+
+<script>
+(function(){
+    const translations = {
+        en: {
+            title: "Account Registration",
+            username: "Username (unique):",
+            contact: "Email or Mobile:",
+            name: "Full Name:",
+            id: "Identity Document:",
+            age: "Age:",
+            captcha: q => `What is ${q.a} + ${q.b}?`,
+            save: "Save Progress",
+            submit: "Submit",
+            errors: {
+                duplicate: "Username or contact already exists.",
+                captcha: "Incorrect CAPTCHA answer.",
+                age: "You must be 18 or older.",
+                required: "Please fill out all fields."
+            },
+            welcome: name => `Welcome, ${name}!`
+        },
+        es: {
+            title: "Registro de Cuenta",
+            username: "Nombre de usuario (único):",
+            contact: "Correo o Móvil:",
+            name: "Nombre Completo:",
+            id: "Documento de Identidad:",
+            age: "Edad:",
+            captcha: q => `¿Cuánto es ${q.a} + ${q.b}?`,
+            save: "Guardar progreso",
+            submit: "Enviar",
+            errors: {
+                duplicate: "El usuario o contacto ya existe.",
+                captcha: "Respuesta CAPTCHA incorrecta.",
+                age: "Debes tener 18 años o más.",
+                required: "Por favor completa todos los campos."
+            },
+            welcome: name => `¡Bienvenido, ${name}!`
+        }
+    };
+
+    let currentLang = 'en';
+    const form = document.getElementById('registration-form');
+    const msgBox = document.getElementById('message');
+    const labels = {
+        username: document.getElementById('lbl-username'),
+        contact: document.getElementById('lbl-contact'),
+        name: document.getElementById('lbl-name'),
+        id: document.getElementById('lbl-id'),
+        age: document.getElementById('lbl-age'),
+        captcha: document.getElementById('lbl-captcha')
+    };
+    const inputs = {
+        username: document.getElementById('username'),
+        contact: document.getElementById('contact'),
+        name: document.getElementById('fullname'),
+        id: document.getElementById('identity'),
+        age: document.getElementById('age'),
+        captcha: document.getElementById('captcha-answer')
+    };
+
+    function loadLanguage(lang){
+        currentLang = lang;
+        document.getElementById('title').innerText = translations[lang].title;
+        labels.username.innerText = translations[lang].username;
+        labels.contact.innerText = translations[lang].contact;
+        labels.name.innerText = translations[lang].name;
+        labels.id.innerText = translations[lang].id;
+        labels.age.innerText = translations[lang].age;
+        labels.captcha.innerText = translations[lang].captcha(captchaQuestion);
+        document.getElementById('save-btn').innerText = translations[lang].save;
+        document.getElementById('submit-btn').innerText = translations[lang].submit;
+        // refresh captcha label when language changes
+        labels.captcha.innerText = translations[lang].captcha(captchaQuestion);
+    }
+
+    let captchaQuestion = {a:0, b:0, id:''};
+    async function fetchCaptcha(){
+        const res = await fetch('/api/captcha');
+        captchaQuestion = await res.json();
+        labels.captcha.innerText = translations[currentLang].captcha(captchaQuestion);
+    }
+
+    function showError(key){
+        msgBox.style.color = 'red';
+        msgBox.innerText = translations[currentLang].errors[key];
+    }
+
+    function showSuccess(name){
+        msgBox.style.color = 'green';
+        msgBox.innerText = translations[currentLang].welcome(name);
+    }
+
+    function loadProgress(){
+        const saved = localStorage.getItem('incompleteRegistration');
+        if(saved){
+            try {
+                const data = JSON.parse(saved);
+                Object.keys(inputs).forEach(k => { if(data[k]) inputs[k].value = data[k]; });
+            } catch(e){ }
+        }
+    }
+
+    function saveProgress(){
+        const data = {};
+        Object.keys(inputs).forEach(k => data[k] = inputs[k].value);
+        localStorage.setItem('incompleteRegistration', JSON.stringify(data));
+        msgBox.style.color = 'green';
+        msgBox.innerText = 'Progress saved.';
+    }
+
+
+    document.getElementById('lang-en').onclick = () => loadLanguage('en');
+    document.getElementById('lang-es').onclick = () => loadLanguage('es');
+    document.getElementById('save-btn').onclick = saveProgress;
+
+    form.onsubmit = async function(ev){
+        ev.preventDefault();
+        for(const key of ['username','contact','name','id','age','captcha']){
+            if(!inputs[key].value){
+                showError('required');
+                return;
+            }
+        }
+        const payload = {
+            username: inputs.username.value,
+            contact: inputs.contact.value,
+            name: inputs.name.value,
+            identity: inputs.id.value,
+            age: inputs.age.value,
+            captchaId: captchaQuestion.id,
+            captchaAnswer: inputs.captcha.value
+        };
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if(!res.ok){
+            showError(data.error);
+            await fetchCaptcha();
+            return;
+        }
+        localStorage.removeItem('incompleteRegistration');
+        showSuccess(payload.name);
+        form.reset();
+        await fetchCaptcha();
+    };
+
+    loadLanguage('en');
+    loadProgress();
+    fetchCaptcha();
+})();
+</script>
+</body>
+</html>
